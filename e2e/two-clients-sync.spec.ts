@@ -20,32 +20,36 @@ test('two clients in the same room see each other\'s step edits live, with no re
   await expect(pageB.getByTestId('realtime-status')).toHaveAttribute('data-ready', 'true', { timeout: 15_000 })
 
   const stepTestId = 'step-kick-0'
+  let clickCount = 0
 
-  async function toggleOnA() {
-    // Only toggle if not already active -- this may run more than once
-    // below (retry loop), and toggling an already-active step back off
-    // would defeat the retry.
-    const isActive = await pageA.getByTestId(stepTestId).getAttribute('data-active')
-    if (isActive !== 'true') {
-      await pageA.getByTestId(stepTestId).click()
-    }
+  async function clickStepOnA() {
+    // Unconditional -- a guard that skips clicking once pageA's own
+    // optimistic UI already shows "active" looks idempotent, but it means
+    // every retry after the first becomes a no-op (no new write is ever
+    // sent), which defeats the retry entirely. Track parity instead, so
+    // every retry unconditionally performs a fresh click/UPDATE.
+    await pageA.getByTestId(stepTestId).click()
+    clickCount++
   }
 
-  // On a freshly-started local Supabase instance (true in CI), Realtime's
+  // On a freshly-started local Supabase instance (true in CI; a
+  // long-running local dev instance doesn't show this), Realtime's
   // internal publication cache can still be warming up just after a
   // client's own SUBSCRIBED handshake completes, so an update pushed
-  // immediately after can be missed. Retry the write itself -- toggling
-  // is idempotent here (see the guard above), and each retry is a fresh
-  // UPDATE event that will be delivered once the cache catches up.
-  await toggleOnA()
+  // immediately after can be missed. Retry the write itself -- each retry
+  // is a genuinely fresh UPDATE event that will be delivered once the
+  // cache catches up.
+  await clickStepOnA()
   for (let attempt = 0; attempt < 5; attempt++) {
+    const expected = clickCount % 2 === 1 ? 'true' : 'false'
     const active = await pageB.getByTestId(stepTestId).getAttribute('data-active')
-    if (active === 'true') break
-    await toggleOnA()
+    if (active === expected) break
+    await clickStepOnA()
     await pageB.waitForTimeout(3000)
   }
 
-  await expect(pageB.getByTestId(stepTestId)).toHaveAttribute('data-active', 'true', { timeout: 10_000 })
+  const expectedFinal = clickCount % 2 === 1 ? 'true' : 'false'
+  await expect(pageB.getByTestId(stepTestId)).toHaveAttribute('data-active', expectedFinal, { timeout: 10_000 })
 
   await contextA.close()
   await contextB.close()
