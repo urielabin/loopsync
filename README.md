@@ -3,7 +3,7 @@
 [![CI](https://github.com/urielabin/loopsync/actions/workflows/ci.yml/badge.svg)](https://github.com/urielabin/loopsync/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A mini collaborative browser step-sequencer. Synthesized drum voices (no sample assets), sample-accurate lookahead scheduling, and live shared pattern editing over Supabase Realtime. No accounts — create a room, share the code. A personal Web Audio API learning project, not a portfolio piece.
+A mini collaborative browser step-sequencer. Synthesized drum voices (no sample assets), sample-accurate lookahead scheduling, and live shared pattern editing over Supabase Realtime. No accounts — create a room, share the code.
 
 ## Architecture
 
