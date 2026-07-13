@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      # No real Supabase project is needed to build -- these are placeholder
+      # values so supabase-client.ts's startup check doesn't throw.
+      - run: npm run build
+        env:
+          VITE_SUPABASE_URL: http://127.0.0.1:54321
+          VITE_SUPABASE_ANON_KEY: placeholder
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - run: supabase start
+      - name: Read local Supabase credentials into env
+        run: |
+          supabase status -o env | grep -E '^(API_URL|ANON_KEY)=' | tr -d '"' >> "$GITHUB_ENV"
+      - name: Run integration tests against real local Supabase
+        run: npm run test:integration
+        env:
+          VITE_SUPABASE_URL: ${{ env.API_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ env.ANON_KEY }}
+      - run: supabase stop
+        if: always()
+
+  e2e-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - run: supabase start
+      - name: Read local Supabase credentials into env
+        run: |
+          supabase status -o env | grep -E '^(API_URL|ANON_KEY)=' | tr -d '"' >> "$GITHUB_ENV"
+      - run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ env.API_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ env.ANON_KEY }}
+      # Real end-to-end check: two separate Playwright browser contexts
+      # (two anonymous clients) join the same room, one toggles a step, and
+      # the other's grid is asserted to update live with no reload --
+      # proving the Realtime subscription and the permissive RLS policy
+      # both actually work, not just that the write succeeds.
+      - name: Start preview server
+        run: nohup npm run preview -- --port 4173 > preview.log 2>&1 &
+      - name: Wait for preview server
+        run: until curl -sf http://localhost:4173 >/dev/null; do sleep 0.5; done
+      - run: npx playwright test
+      - run: supabase stop
+        if: always()
